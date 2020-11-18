@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: client-script
+  namespace: go-server
+data:
+  client.sh: |
+    #!/bin/sh
+    set -e
+
+    #/root/client &> /tmp/curl-client.log
+    while true; do
+      #URL="http://strigazi-cc7-builder:14000/sayhello/Spyros"
+      #URL="http://go-server:14000/sayhello/Spyros"
+      #URL="http://go-server-employees.cern.ch/employees/10001"
+      #URL="http://go-server-employees.cern.ch/employees/$(shuf -i 10001-499990 -n 1)"
+      _base_url="http://str18-8-1.cern.ch/go-server/sayhello/spyros"
+      #_id="$(shuf -i 10001-499990 -n 1)"
+      curl -s -w  "${_base_url} %{http_code} %{remote_ip} %{time_total}\n" -o /dev/null \
+          "${_base_url}" | tee --append --ignore-interrupts /tmp/curl-client.log
+      #sleep 0.2s
+    done
+  logrotate.conf: |
+    /tmp/curl-client.log {
+        rotate 0
+        copytruncate
+        size 10M
+        missingok
+        nocompress
+    }
+  grok-config.yml: |
+    global:
+      config_version: 3
+    input:
+      type: file
+      path: /tmp/curl-client.log
+      fail_on_missing_logfile: false
+    imports:
+    - type: grok_patterns
+      dir: ./patterns
+    metrics:
+    - type: histogram
+      name: curl_client_request
+      help: Curl client request response times
+      match: '%{DATA:rawrequest} %{NUMBER:http_code} %{IP:remoteip} %{NUMBER:time_total}'
+      value: '{{.time_total}}'
+      labels:
+        http_code: '{{.http_code}}'
+        rawrequest: '{{.rawrequest}}'
+        remoteip: '{{.remoteip}}'
+    - type: counter
+      name: curl_client_request_counter
+      help: Curl client request response counter
+      match: '%{DATA:rawrequest} %{NUMBER:http_code} %{IP:remoteip} %{NUMBER:time_total}'
+      labels:
+        http_code: '{{.http_code}}'
+        rawrequest: '{{.rawrequest}}'
+        remoteip: '{{.remoteip}}'
+    server:
+      protocol: http
+      port: 9144
+

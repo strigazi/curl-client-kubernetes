@@ -1,0 +1,67 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client
+  namespace: go-server
+  labels:
+    k8s-app: curl-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: curl-client
+  template:
+    metadata:
+      labels:
+        k8s-app: curl-client
+    spec:
+      containers:
+      - name: curl-client
+        image: centos:8
+        imagePullPolicy: "IfNotPresent"
+        command: ['/bin/sh', '-c']
+        args: ['/client.sh']
+        #image: gitlab-registry.cern.ch/strigazi/containers/go-server-client:v0.0.7
+        #imagePullPolicy: "IfNotPresent"
+        #command: ['/bin/sh', '-c']
+        #args: ['/client.sh']
+        #command:
+        #- /root/client
+        #- "&>"
+        #- /tmp/curl-client.log
+        volumeMounts:
+          - name: workspace
+            mountPath: /tmp
+          - name: client-cm
+            mountPath: /client.sh
+            subPath: client.sh
+      - name: grok
+        image: gitlab-registry.cern.ch/strigazi/containers/grok_exporter
+        imagePullPolicy: "Always"
+        command:
+        - grok_exporter
+        - -config
+        - /grok-config.yml
+        ports:
+        - containerPort: 9144
+        volumeMounts:
+          - name: workspace
+            mountPath: /tmp
+          - name: client-cm
+            mountPath: /grok-config.yml
+            subPath: grok-config.yml
+      - name: logrotate
+        image: gitlab-registry.cern.ch/strigazi/containers/logrotate:centos8
+        imagePullPolicy: "IfNotPresent"
+        command:
+        - sleep
+        args:
+        - 100d
+      volumes:
+      - name: workspace
+        emptyDir:
+      - name: client-cm
+        configMap:
+          name: client-script
+          defaultMode: 0755
