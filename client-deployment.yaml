@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: client
-  namespace: go-server
+  namespace: default
   labels:
     k8s-app: curl-client
 spec:
@@ -16,35 +16,37 @@ spec:
       labels:
         k8s-app: curl-client
     spec:
+      #nodeName: str-loader-2xlarge-24s5kpxs7xad-node-0
+      #hostNetwork: true
       containers:
       - name: curl-client
-        image: centos:8
+        #image: centos:8
+        image: registry.fedoraproject.org/fedora:33
         imagePullPolicy: "IfNotPresent"
-        command: ['/bin/sh', '-c']
+        command: ['/bin/bash', '-c']
         args: ['/client.sh']
-        #image: gitlab-registry.cern.ch/strigazi/containers/go-server-client:v0.0.7
-        #imagePullPolicy: "IfNotPresent"
-        #command: ['/bin/sh', '-c']
-        #args: ['/client.sh']
-        #command:
-        #- /root/client
-        #- "&>"
-        #- /tmp/curl-client.log
+        #args: ['for i in $(seq 1 10) ; do /client.sh & done ; echo "sleeping 60m" ; sleep 60m']
         volumeMounts:
           - name: workspace
             mountPath: /tmp
           - name: client-cm
             mountPath: /client.sh
             subPath: client.sh
+          - mountPath: /etc/
+            name: etc-grid-security
+          - name: cms-proxy
+            mountPath: /certs
+          - name: urls
+            mountPath: /data
       - name: grok
         image: gitlab-registry.cern.ch/strigazi/containers/grok_exporter
-        imagePullPolicy: "Always"
+        imagePullPolicy: "IfNotPresent"
         command:
         - grok_exporter
         - -config
         - /grok-config.yml
-        ports:
-        - containerPort: 9144
+        #ports:
+        #- containerPort: 9144
         volumeMounts:
           - name: workspace
             mountPath: /tmp
@@ -58,6 +60,9 @@ spec:
         - sleep
         args:
         - 100d
+      securityContext:
+        seLinuxOptions:
+          type: "spc_t"
       volumes:
       - name: workspace
         emptyDir:
@@ -65,3 +70,13 @@ spec:
         configMap:
           name: client-script
           defaultMode: 0755
+      - name: urls
+        configMap:
+          name: urls
+          defaultMode: 0755
+      - name: etc-grid-security
+        hostPath:
+          path: /etc/
+      - name: cms-proxy
+        secret:
+          secretName: cms-proxy
